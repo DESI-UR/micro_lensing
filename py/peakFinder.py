@@ -1,9 +1,16 @@
+#
+# This code is written by Tri Nguyen
+#
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.stats import norm
-mpl.rc('font', size=14)
+import matplotlib.pyplot as plt
+import math
+from scipy.optimize import curve_fit
 
+mpl.rc('font', size=14)
 
 def genpeaks(npeaks):
     x = np.linspace(0, 1000, 1001)
@@ -17,16 +24,12 @@ def genpeaks(npeaks):
 
 def genbkg(x, f):
     return 0.02 * np.sin(f*x)
-#     return 0.01 - f*x
 
 def gennoise(x):
     return 0.01*np.random.randn(len(x))
 
-
 # SNIP Algorithm
-# 
 # Compute the background for a peaky spectrum using the sensitive nonlinear iterative clipping peak (SNIP) algorithm:
-# 
 # M. Morhác, Appl. Spec. 62:2008, 91-106 (https://doi.org/10.1366/000370208783412762)
 def snip(x, niter, smoothWindow=None):
     """Implementation of the SNIP algorithm for estimating background
@@ -86,7 +89,9 @@ def snip(x, niter, smoothWindow=None):
 
 # ## Peak Search Algorithm
 # 
-# Search for peaks in source spectrum based on deconvolution method. The response function is generated according to given sigma and deconvolution is carried out. The order of peaks is arranged according to their heights in the spectrum (if desired).
+# Search for peaks in source spectrum based on deconvolution method.
+# The response function is generated according to given sigma and deconvolution is carried out.
+# The order of peaks is arranged according to their heights in the spectrum (if desired).
 # 
 # The common problems connected with correct peak identification are:
 # - non-sensitivity to noise, i.e., only statistically relevant peaks should be identified.
@@ -99,10 +104,6 @@ def snip(x, niter, smoothWindow=None):
 # 1. M.A. Mariscotti: A method for identification of peaks in the presence of background and its application to spectrum analysis. NIM 50 (1967), 309-320.
 # 2. M. Morhac;, J. Kliman, V. Matouoek, M. Veselsky, I. Turzo.:Identification of peaks in multidimensional coincidence gamma-ray spectra. NIM, A443 (2000) 108-125.
 # 3. Z.K. Silagadze, A new algorithm for automatic photopeak searches. NIM A 376 (1996), 451.
-
-# In[4]:
-
-
 def search_peak(*args, **kwargs):
     '''Search for peaks in source spectrum based on deconvolution method.
     The response function is generated according to given sigma and deconvolution is carried out.
@@ -114,7 +115,7 @@ def search_peak(*args, **kwargs):
          Length of source spectrum.
      - sigma : float (default = 3)
          Width of searched peaks. Must be greater than or equal to 1.
-     - threshold: float (default = 0.05)
+     - threshold: float
          Threshold value in % for selected peaks,peaks with amplitude less than threshold*highest_peak/100 are ignored.
          Must be positive and less than 100.
      - decon_iterations: int (default = 3)
@@ -140,7 +141,7 @@ def search_peak(*args, **kwargs):
             raise AttributeError("Unknow property {}".format(key))
     return_sort, return_decon =  args_dict.values()
     
-    if sigma < 1:
+    if sigma < .1:
         raise ValueError("Invalid sigma. Must be greater than or equal to 1.")
     
     if (threshold <= 0) or (threshold >= 100):
@@ -150,7 +151,6 @@ def search_peak(*args, **kwargs):
     shift = n_iterations
     size_ext = ssize + 2*n_iterations
     
-    #----------------------------------------
     # Setting Up
     # conversion for line 2778-2820
     k = int(2*sigma+0.5)
@@ -175,7 +175,6 @@ def search_peak(*args, **kwargs):
     workspace[size_ext+shift+ssize:2*size_ext] = np.maximum(0, source[-1])
     workspace[6*size_ext:7*size_ext] =  workspace[size_ext:2*size_ext]
 
-    #----------------------------------------
     # Deconvolution
     area = 0.
     lh_gold = -1
@@ -274,17 +273,14 @@ def search_peak(*args, **kwargs):
 
     lda = np.minimum(1., threshold)/100
     
-    #--------------------------------
     # Peak Searching
     peak_pos = np.zeros(max_peak)-1
     peak_index = 0 
     for i in range(1, size_ext-1):
         if (workspace[i] <= workspace[i-1]) or (workspace[i] <= workspace[i+1]):
             continue
-        if (workspace[i] <= lda*maximum_decon) or (workspace[6*size_ext+i] <= threshold):#"*maximum/100.):
+        if (workspace[i] <= lda*maximum_decon) or (workspace[6*size_ext+i] <= threshold):
             continue    
-        #if (workspace[6*size_ext+i] <= threshold):
-        #    continue    
         if (i < shift) or (i >= ssize+shift):
             continue
         j = np.arange(i-1, i+2)
@@ -322,61 +318,55 @@ def search_peak(*args, **kwargs):
     return peak_pos
 
 
-# Generate a random spectrum with a sinusoidal background.
+def example():
+    x, y = genpeaks(10)
+    bkg = genbkg(x, 0.005)
+    noise = gennoise(x)
+    y += bkg + noise
 
-# In[5]:
+    # Compute the background with SNIP, tuning the number of iterations and using smoothing (or not).
+    # Generally one wants the number of iterations to be about the width of the typical peak.
+    # Note that without smoothing the background estimate tends to be biased in the presence of
+    # noise since it will fit the lower envelope of the statistical fluctuations in the spectrum.
+    # Smoothing will correct most of the bias but one has to watch for overfitting.
+    b  = snip(y, 20)
+    bs = snip(y, 18, 5)
 
-
-x, y = genpeaks(10)
-bkg = genbkg(x, 0.005)
-noise = gennoise(x)
-y += bkg + noise
-
-
-# Compute the background with SNIP, tuning the number of iterations and using smoothing (or not).
-# 
-# Generally one wants the number of iterations to be about the width of the typical peak.
-# 
-# Note that without smoothing the background estimate tends to be biased in the presence of noise since it will fit the lower envelope of the statistical fluctuations in the spectrum. Smoothing will correct most of the bias but one has to watch for overfitting.
-# 
-# The plots below show the bias present in the background-subtracted data if smoothing is not applied to the noisy spectrum.
-
-# In[6]:
-
-
-b  = snip(y, 20)
-bs = snip(y, 18, 5)
-
-fig, axes = plt.subplots(2, 2, figsize=(12,10), sharex=True)
-ax1, ax2, ax3, ax4 = axes.flatten()
-ax1.plot(x, y)
-ax1.plot(x, b)
-ax1.plot(x, bs)
-ax1.set(title='Data')
-ax2.plot(x, bkg, ',', label='bkg (model)')
-ax2.plot(x, b, label='bkg (unsmoothed)')
-ax2.plot(x, bs, label='bkg (smoothed)')
-ax2.legend(fontsize=12)
-ax2.set(title='Bkg')
-ax3.plot(x, y-b)
-ax3.grid()
-ax3.set(title='Data - Unsmoothed Bkg')
-ax4.plot(x, y-bs)
-ax4.set(title='Data - Smoothed Bkg')
-ax4.grid()
-fig.tight_layout();
-
-
-# ### FDR for threshold finding
-# Method works only for a background with $\sigma$=1. So we need to scale the bin_edges
-
-# In[7]:
-
-
-import matplotlib.pyplot as plt
-import math
-from scipy.optimize import curve_fit
-
+    fig, axes = plt.subplots(2, 2, figsize=(12,10), sharex=True)
+    ax1, ax2, ax3, ax4 = axes.flatten()
+    ax1.plot(x, y)
+    ax1.plot(x, b)
+    ax1.plot(x, bs)
+    ax1.set(title='Data')
+    ax2.plot(x, bkg, ',', label='bkg (model)')
+    ax2.plot(x, b, label='bkg (unsmoothed)')
+    ax2.plot(x, bs, label='bkg (smoothed)')
+    ax2.legend(fontsize=12)
+    ax2.set(title='Bkg')
+    ax3.plot(x, y-b)
+    ax3.grid()
+    ax3.set(title='Data - Unsmoothed Bkg')
+    ax4.plot(x, y-bs)
+    ax4.set(title='Data - Smoothed Bkg')
+    ax4.grid()
+    fig.tight_layout();
+    plt.show()
+    
+    source = y-bs
+    ssize  = len(source)
+    sigma  = 1.0
+    decon_iterations = 10
+    max_peak = 30
+    threshold = get_FDR_threshold(source)
+    peak_pos = search_peak(source, ssize, sigma, threshold, decon_iterations, max_peak)
+    print(peak_pos)
+    fig, axes = plt.subplots(1, 1, figsize=(13, 5))
+    axes.plot(x, source)
+    axes.scatter(peak_pos, source[peak_pos], color = 'r')
+    axes.set(title = 'Data')
+    fig.tight_layout()
+    plt.show()
+    
 def calcParams(counts, bin_edges, q, isConservative=True):
     nbins = len(counts)
     params = np.zeros(4)
@@ -413,47 +403,18 @@ def scale_histogram(counts, bin_edges):
     scale = 1./popt[1]
     return scale
     
-counts, bin_edges, patches = plt.hist(y-bs, bins=500)
-counts = counts/np.sum(counts)
-scale = scale_histogram(counts, bin_edges)
-threshold = (calcParams(counts, bin_edges*scale, 0.00001)/scale)
-#threshold = (calcParams(counts, bin_edges*scale, 0.005, isConservative=False)/scale)
-print("FDR says the threshold needs to be at {}".format(threshold))
+def get_FDR_threshold(s):
+    counts, bin_edges, patches = plt.hist(s, bins=500)
+    counts = counts/np.sum(counts)
+    # Method works only for a background with $\sigma$=1. So we need to scale the bin_edges
+    scale = scale_histogram(counts, bin_edges)
+    threshold = (calcParams(counts, bin_edges*scale, 0.00001)/scale)
+    #threshold = (calcParams(counts, bin_edges*scale, 0.005, isConservative=False)/scale)
+    print("FDR says the threshold needs to be at {}".format(threshold))
+    return threshold
 
-
-# Peak Searching
-
-# In[8]:
-
-
-source = y-bs
-ssize  = len(source)
-sigma  = 1.0
-decon_iterations = 10
-max_peak = 30
-#threshold = 2.
-
-#print(max_peak)
-peak_pos = search_peak(source, ssize, sigma, threshold, decon_iterations, max_peak)
-print(peak_pos)
-
-
-# In[9]:
-
-
-fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-ax1, ax2 = axes
-
-ax1.plot(x, source)
-ax1.scatter(peak_pos, source[peak_pos], color = 'r')
-ax1.set(title = 'Data')
-#ax2.plot(x, decon)
-#ax2.set(title='Deconvolved Data')
-
-fig.tight_layout()
-
-
-# In[ ]:
+if __name__=="__main__":
+    example()
 
 
 
