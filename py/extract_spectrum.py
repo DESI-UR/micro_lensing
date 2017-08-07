@@ -27,19 +27,20 @@ def get_spectrum(file_idx=0, source_idx=0, output=False):
     
     from scipy.interpolate import interp1d
     extrapolator = interp1d(wave, flux, fill_value='extrapolate')
-    wavelengths  = np.arange(3500., 10000.0, 0.1)
-    fluxvalues   = np.zeros(len(wavelengths))
+    wavelengths  = []
+    fluxvalues   = []
     if output:
         fd = open("{}_spectrum_{}.dat".format(source_type, i), "w")
         fd.write("#   WAVELENGTH        FLUX\n#------------- -----------\n")
-    for i in range(len(wavelengths)):
-        wavelength = wavelengths[i]
+    for i in np.arange(3600., 9000.):
+        wavelength = i
         fluxvalue = extrapolator(wavelength)
-        if fluxvalue < 0:
-            fluxvalue = 0.
-        fluxvalues[i] = fluxvalue
+        if fluxvalue < -10:
+            continue
+        wavelengths.append(wavelength)
+        fluxvalues.append(fluxvalue)
         if output:
-            fd.write("     {0:.3f}     {1:.4f}\n".format(wavelengths[i], fluxvalues[i]))
+            fd.write("     {0:.3f}     {1:.4f}\n".format(wavelength, fluxvalue))
     if output:
         fd.close()
     return wavelengths, fluxvalues

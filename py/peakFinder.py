@@ -397,9 +397,9 @@ def scale_histogram(counts, bin_edges):
     scale = 1
     for i in range(len(counts)):
         if bin_edges[i]>0:
-            last_idx = (i-1)*2
+            last_idx = (i-1)
             break
-    popt, pcov = curve_fit(gauss_function, bin_edges[:last_idx], counts[:last_idx], p0 = [1, 0.001])
+    popt, pcov = curve_fit(gauss_function, bin_edges[:last_idx], counts[:last_idx], p0 = [1., 1.])
     scale = 1./popt[1]
     return scale
     
@@ -408,7 +408,7 @@ def get_FDR_threshold(s):
     counts = counts/np.sum(counts)
     # Method works only for a background with $\sigma$=1. So we need to scale the bin_edges
     scale = scale_histogram(counts, bin_edges)
-    threshold = (calcParams(counts, bin_edges*scale, 0.00001)/scale)
+    threshold = (calcParams(counts, bin_edges*scale, 1e-8)/scale)
     #threshold = (calcParams(counts, bin_edges*scale, 0.005, isConservative=False)/scale)
     print("FDR says the threshold needs to be at {}".format(threshold))
     return threshold
